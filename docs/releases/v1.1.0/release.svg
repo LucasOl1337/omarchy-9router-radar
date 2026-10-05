@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1136" viewBox="0 0 1200 1136">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#160D31"/><stop offset="1" stop-color="#28184D"/></linearGradient></defs>
+<rect width="1200" height="1136" fill="url(#bg)"/>
+<path d="M28 78V28H78 M1122 28H1172V78 M28 1058V1108H78 M1122 1108H1172V1058" stroke="#BCB1D2" opacity=".35" fill="none" stroke-width="2"/>
+<text x="56" y="94" fill="#F8F5FF" font-family="Liberation Sans, sans-serif" font-size="48" font-weight="700" >Radar 9Router</text>
+<rect x="394" y="54" width="142" height="46" rx="23" fill="#8260C0"/>
+<text x="416" y="86" fill="#FFFFFF" font-family="Liberation Sans, sans-serif" font-size="27" font-weight="700" >v1.1.0</text>
+<text x="1144" y="64" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="20" font-weight="700" text-anchor="end" letter-spacing="2">LUCASOL</text>
+<text x="1144" y="99" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="20" font-weight="400" text-anchor="end">5 de outubro de 2026</text>
+<text x="56" y="154" fill="#F2CC91" font-family="Liberation Sans, sans-serif" font-size="23" font-weight="700" letter-spacing="2">NOTAS DA ATUALIZAÇÃO</text>
+<path d="M56 182H1144" stroke="#BCB1D2" opacity=".25"/>
+<text x="56" y="222" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="24" font-weight="400" >Todas as contas e a prioridade de uso num radar único.</text>
+<rect x="56" y="253" width="7" height="34" rx="3" fill="#FFC61A"/>
+<text x="80" y="277" fill="#FFC61A" font-family="Liberation Sans, sans-serif" font-size="26" font-weight="700" letter-spacing="2">NOVIDADES</text>
+<text x="1144" y="277" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="20" font-weight="400" text-anchor="end">3 itens</text>
+<circle cx="83" cy="325" r="6" fill="#FFC61A"/>
+<text x="103" y="333" fill="#F8F5FF" font-family="Liberation Sans, sans-serif" font-size="28" font-weight="700" >Uma lista pros seus routers</text>
+<text x="103" y="369" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="23" font-weight="400" >Contas, uso e conexões aparecem juntas. O ícone da barra é 9R.</text>
+<circle cx="83" cy="423" r="6" fill="#FFC61A"/>
+<text x="103" y="431" fill="#F8F5FF" font-family="Liberation Sans, sans-serif" font-size="28" font-weight="700" >Qual conta usar primeiro</text>
+<text x="103" y="467" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="23" font-weight="400" >A cota livre ordena as opções, com renovação e estado da leitura.</text>
+<circle cx="83" cy="521" r="6" fill="#FFC61A"/>
+<text x="103" y="529" fill="#F8F5FF" font-family="Liberation Sans, sans-serif" font-size="28" font-weight="700" >Uso por período e rota</text>
+<text x="103" y="565" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="23" font-weight="400" >Consulte Hoje, 7 dias, 30 dias e Total e veja onde usar a conta.</text>
+<path d="M56 609H1144" stroke="#BCB1D2" opacity=".18"/>
+<rect x="56" y="629" width="7" height="34" rx="3" fill="#30BCEF"/>
+<text x="80" y="653" fill="#30BCEF" font-family="Liberation Sans, sans-serif" font-size="26" font-weight="700" letter-spacing="2">CORREÇÕES</text>
+<text x="1144" y="653" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="20" font-weight="400" text-anchor="end">1 item</text>
+<circle cx="83" cy="701" r="6" fill="#30BCEF"/>
+<text x="103" y="709" fill="#F8F5FF" font-family="Liberation Sans, sans-serif" font-size="28" font-weight="700" >Sem abas por domínio</text>
+<text x="103" y="745" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="23" font-weight="400" >O radar reúne os routers e troca a versão da interface sem cache antigo.</text>
+<path d="M56 789H1144" stroke="#BCB1D2" opacity=".18"/>
+<rect x="56" y="809" width="7" height="34" rx="3" fill="#AA88FA"/>
+<text x="80" y="833" fill="#AA88FA" font-family="Liberation Sans, sans-serif" font-size="26" font-weight="700" letter-spacing="2">SISTEMAS</text>
+<text x="1144" y="833" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="20" font-weight="400" text-anchor="end">1 item</text>
+<circle cx="83" cy="881" r="6" fill="#AA88FA"/>
+<text x="103" y="889" fill="#F8F5FF" font-family="Liberation Sans, sans-serif" font-size="28" font-weight="700" >Instalação pra outros Omarchys</text>
+<text x="103" y="925" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="23" font-weight="400" >Configure os routers e as credenciais por comando, variável ou SSH.</text>
+<path d="M56 969H1144" stroke="#BCB1D2" opacity=".18"/>
+<text x="56" y="1061" fill="#F2CC91" font-family="Liberation Sans, sans-serif" font-size="24" font-weight="700" >Código, instalação e notas completas no GitHub.</text>
+<text x="56" y="1096" fill="#BCB1D2" font-family="Liberation Sans, sans-serif" font-size="20" font-weight="400" >github.com/LucasOl1337/omarchy-9router-radar/releases</text>
+</svg>
