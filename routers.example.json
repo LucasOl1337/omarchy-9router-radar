@@ -1,0 +1,24 @@
+{
+  "routers": {
+    "primary": {
+      "rotulo": "Principal",
+      "base_url": "https://router.example.com/v1",
+      "transport": "http",
+      "password_command": [
+        "secret-tool",
+        "lookup",
+        "service",
+        "9router",
+        "instance",
+        "primary"
+      ]
+    },
+    "backup": {
+      "rotulo": "Reserva",
+      "transport": "ssh",
+      "ssh_host": "my-router-server",
+      "container": "9router",
+      "api_port": 20128
+    }
+  }
+}

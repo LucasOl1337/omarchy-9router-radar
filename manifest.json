@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "lol.routers",
+  "name": "9Router · radar de contas",
+  "version": "1.1.0",
+  "author": "LucasOl",
+  "description": "Radar único de contas, uso e prioridade pela cota livre nos três 9Routers.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "9Router",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  },
+  "license": "MIT"
+}
