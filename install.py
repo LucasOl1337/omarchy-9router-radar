@@ -10,10 +10,10 @@ from pathlib import Path
 
 def deploy_ui(source, destination):
     """Give each QML generation a fresh URL in the running shell's cache."""
-    files = sorted([*source.glob('*.qml'), *source.glob('*.js')])
+    files = sorted([*source.glob('*.qml'), *source.glob('*.js'), *source.glob('icons/*.png')])
     digest = hashlib.sha256()
     for path in files:
-        digest.update(path.name.encode() + b'\0' + path.read_bytes())
+        digest.update(path.relative_to(source).as_posix().encode() + b'\0' + path.read_bytes())
     generation = digest.hexdigest()[:20]
     runtime = destination / '.runtime' / generation
     runtime.parent.mkdir(parents=True, exist_ok=True)
@@ -21,7 +21,9 @@ def deploy_ui(source, destination):
         temporary = Path(tempfile.mkdtemp(prefix='.staging-', dir=runtime.parent))
         try:
             for path in files:
-                shutil.copy2(path, temporary / path.name)
+                target = temporary / path.relative_to(source)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
             temporary.rename(runtime)
         finally:
             if temporary.exists():

@@ -23,6 +23,11 @@ class CollectorTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'indisponível'):
                 collector.dashboard_password('custom', {'password_env': 'MISSING'})
 
+    def test_slow_credential_command_reports_busy_vault(self):
+        with patch.object(collector.subprocess, 'run', side_effect=collector.subprocess.TimeoutExpired('cofre', 180)):
+            with self.assertRaisesRegex(RuntimeError, 'Cofre ocupado'):
+                collector.dashboard_password('custom', {'password_command': ['cofre']})
+
     def test_ssh_uses_configured_host_container_and_port(self):
         payload = SimpleNamespace(returncode=0, stdout='{"connections":[],"stats":{},"quotas":{}}')
         with patch.object(collector.subprocess, 'run', return_value=payload) as run:
@@ -54,6 +59,13 @@ class CollectorTest(unittest.TestCase):
         self.assertEqual(account['quotaUpdatedAt'], 123)
         self.assertEqual(account['quotaError'], 'Falha')
         self.assertEqual(account['email'], 'a@example.com')
+
+    def test_quota_keeps_used_and_total_for_the_counter(self):
+        result = collector.clean_quotas({'quotas': {'session (5h)': {'used': 52, 'total': 100, 'resetAt': '2026-10-16T12:00:00Z'}, 'weekly': {'remainingPercentage': 70}}})
+        self.assertEqual(result[0]['percent'], 52)
+        self.assertEqual((result[0]['used'], result[0]['total']), (52, 100))
+        self.assertEqual(result[1]['percent'], 30)
+        self.assertIsNone(result[1]['total'])
 
 if __name__ == '__main__':
     unittest.main()

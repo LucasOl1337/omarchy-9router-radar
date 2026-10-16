@@ -39,3 +39,17 @@ class InstallTests(unittest.TestCase):
             first = deploy_ui(source, destination)
             (source / 'Model.js').write_text('function value() { return 2 }')
             self.assertNotEqual(first, deploy_ui(source, destination))
+
+    def test_icons_ship_with_each_generation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / 'source'
+            destination = Path(temporary) / 'installed'
+            (source / 'icons').mkdir(parents=True)
+            (source / 'manifest.json').write_text('{"entryPoints": {"barWidget": "Panel.qml"}}')
+            (source / 'Panel.qml').write_text('Item {}')
+            (source / 'icons' / 'claude.png').write_bytes(b'one')
+            first = deploy_ui(source, destination)
+            self.assertEqual((destination / '.runtime' / first / 'icons' / 'claude.png').read_bytes(), b'one')
+            (source / 'icons' / 'claude.png').write_bytes(b'two')
+            self.assertNotEqual(first, deploy_ui(source, destination))
+

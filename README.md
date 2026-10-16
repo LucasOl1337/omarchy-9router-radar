@@ -1,8 +1,10 @@
 # Radar 9Router
 
-Uma lista de contas dos gateways Railway, Hostinger e Sherlocker na barra do Omarchy. Cota livre, renovação, uso por período e rota pra usar aparecem juntos.
+As cotas das contas dos seus 9Routers na barra do Omarchy, no mesmo formato do Quota Tracker do painel do 9Router.
 
-O ícone **9R** abre um radar único. Cada conta aparece com as conexões disponíveis nos seus routers e a prioridade de uso pela cota livre.
+O ícone **9R** abre uma grade de cards, um por conta, com o ícone do provedor e uma barra por cota: verde acima de 70% livre, amarela de 30% a 70%, vermelha abaixo. Cada barra mostra o usado (`52 / 100`), o que resta e quando renova. Os botões do topo mostram todos os routers juntos ou só um deles, e a ordem pode ser por provedor, mais livre ou expira primeiro.
+
+![Painel com cards de cota](docs/releases/v1.2.0/release.png)
 
 ## Instalar
 
@@ -49,7 +51,9 @@ O instalador publica a interface em `.runtime/<hash>/` e troca o manifesto depoi
 
 O arquivo de estado guarda apenas os campos de conta, uso e cota selecionados pelo coletor. Não grava senhas, tokens ou cookies. A coleta não envia prompts e não troca a configuração das rotas. A API de cota pode renovar a autenticação do provedor no próprio gateway.
 
-Clique no ícone pra abrir; botão do meio ou R atualizam; setas rolam e Esc fecha. As opções Hoje, 7 dias, 30 dias e Total mudam os números de uso. A cota segue sempre a janela atual do provedor.
+Clique no ícone pra abrir; botão do meio ou R atualizam e Esc fecha. Setas ← → trocam de router, 0 a 9 escolhem direto (0 é Todas), ↑ ↓ rolam, S troca a ordem e P o período. Hoje, 7 dias, 30 dias e Total mudam os números de uso no rodapé de cada card; a cota segue sempre a janela atual do provedor. Router, ordem e período ficam lembrados em `~/.local/state/omarchy-trackers/routers/view.json`.
+
+Em Todas, a mesma conta presente em mais de um router vira um card só, com um selo por router; o selo verde é a rota recomendada. Contas desativadas aparecem apagadas no fim, e as removidas ficam ocultas. Os ícones dos provedores vêm do [9Router](https://github.com/decolua/9router) (MIT).
 
 Pra conferir o que a barra carregou:
 

@@ -40,6 +40,7 @@ def clean_quotas(payload):
             percent = max(0, min(100, 100 - number(q['remainingPercentage'])))
         reset = q.get('resetAt')
         result.append(dict(label=str(label), percent=round(percent, 1) if percent is not None else None,
+            used=used, total=total if total > 0 else None,
             resetAt=reset if isinstance(reset, (str, int, float)) else None, unlimited=q.get('unlimited') is True))
     return result
 
@@ -64,7 +65,10 @@ def dashboard_password(name, config):
                 'sherlocker': ['cofre', 'teiax', 'pega', '9router']}.get(name)
     if not isinstance(args, list) or not args or not all(isinstance(arg, str) for arg in args):
         raise RuntimeError('Configure password_command ou password_env')
-    password = subprocess.run(args, capture_output=True, text=True, timeout=180)
+    try:
+        password = subprocess.run(args, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('Cofre ocupado: senha do painel demorou') from None
     if password.returncode or not password.stdout.strip():
         raise RuntimeError('Credencial do painel indisponível')
     return password.stdout.strip()
@@ -95,7 +99,8 @@ def http_gateway(name, config, previous):
             stats[period] = None
     quotas = {}
     for c in connections:
-        if c.get('isActive') is False or c.get('provider') not in QUOTA_PROVIDERS:
+        # Disabled connections keep showing their limits, like the dashboard.
+        if c.get('provider') not in QUOTA_PROVIDERS:
             continue
         try:
             raw = get('/api/usage/' + quote(c['id'], safe=''))
@@ -120,7 +125,7 @@ function get(path) { return new Promise((resolve,reject) => {
  const stats={}, quotas={};
  for(const p of ['today','7d','30d','all']) { try{stats[p]=await get('/api/usage/stats?period='+p)}catch(e){stats[p]=null} }
  for(const c of connections) {
-  if(c.isActive===false || !['codex','claude','grok-cli','github','antigravity','gemini-cli','cursor','kiro','qwen','devin','devin-cli'].includes(c.provider)) continue;
+  if(!['codex','claude','grok-cli','github','antigravity','gemini-cli','cursor','kiro','qwen','devin','devin-cli'].includes(c.provider)) continue;
   try { const u=await get('/api/usage/'+encodeURIComponent(c.id));
    quotas[c.id]={quotas:u.quotas||{},updatedAt:Math.floor(Date.now()/1000),error:u.error||u.message?'Limite indisponível':''};
   }catch(e){quotas[c.id]={error:'Leitura de limite indisponível'}}

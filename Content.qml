@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Controls
+import Quickshell
+import Quickshell.Io
 import qs.Commons
 import "RadarModel.js" as RadarModel
 
@@ -8,149 +10,289 @@ Item {
   property var snapshot: ({routers: []})
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  property string router: "all"
+  property string sort: "provider"
   property string period: "today"
   property double now: Date.now()
-  readonly property var radar: RadarModel.buildRows(snapshot, now)
+  readonly property var view: RadarModel.buildCards(snapshot, now, {router: router, sort: sort})
+  readonly property var routerTabs: [{id: "all", name: "Todas"}].concat((snapshot.routers || []).map(r => ({id: r.id, name: r.name, error: r.error})))
+  readonly property var sorts: [{id: "provider", label: "Provedor"}, {id: "free", label: "Mais livre"}, {id: "expiring", label: "Expira primeiro"}]
+  readonly property var periods: [{id: "today", label: "Hoje"}, {id: "7d", label: "7 dias"}, {id: "30d", label: "30 dias"}, {id: "all", label: "Total"}]
+  readonly property real gap: Style.space(10)
+  readonly property int columns: Math.max(1, Math.floor((width + gap) / (Style.space(330) + gap)))
+  readonly property real cardWidth: (list.width - Style.space(10) - gap * (columns - 1)) / columns
   signal refreshRequested()
+
+  function toneColor(tone) { return ({green: "#22c55e", yellow: "#eab308", red: "#ef4444"})[tone] || Qt.rgba(foreground.r, foreground.g, foreground.b, .35) }
+  function faint(alpha) { return Qt.rgba(foreground.r, foreground.g, foreground.b, alpha) }
   function compact(n) { return n >= 1000000 ? (n / 1000000).toFixed(1) + "M" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n || 0) }
-  function providerName(p) { return p.indexOf("compatible") >= 0 ? "API compatível" : ({codex:"Codex",claude:"Claude","grok-cli":"Grok",github:"Copilot",antigravity:"Antigravity",cursor:"Cursor","devin-cli":"Devin",gemini:"Gemini"})[p] || p }
   function duration(ms) {
     if (ms <= 0) return ""
     var minutes = Math.ceil(ms / 60000)
-    return minutes < 60 ? minutes + "min" : minutes < 1440 ? Math.floor(minutes / 60) + "h " + minutes % 60 + "min" : Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h"
+    return minutes < 60 ? minutes + "m" : minutes < 1440 ? Math.floor(minutes / 60) + "h " + minutes % 60 + "m" : Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h " + minutes % 60 + "m"
   }
-  function quotaLabel(q) {
-    var label = q.label.replace(" (7d)", "").replace(" (5h)", "").replace("weekly", "semana").replace("session", "sessão")
-    return label + " " + (q.unlimited ? "sem teto" : q.percent !== null ? q.percent + "% usado" : "sem leitura")
+  // Cards in the same grid row share quota and usage slots, so their bars line up.
+  function rowMax(index, field) {
+    var start = Math.floor(index / columns) * columns, best = 0
+    for (var i = start; i < Math.min(start + columns, view.cards.length); i++) best = Math.max(best, view.cards[i][field].length)
+    return best
   }
-  function memberLabel(m, preferred) {
-    var usage = m.account.periods[root.period]
-    return m.router.name + (preferred ? " · usar aqui" : "") + " · " + (usage ? root.compact(usage.tokens) + " tokens · " + root.compact(usage.requests) + " pedidos · US$ " + usage.cost.toFixed(2) : "uso indisponível") + (m.note ? " · " + m.note : "")
+  function routerCount(id) {
+    return id === root.router ? root.view.cards.length : RadarModel.buildCards(root.snapshot, root.now, {router: id}).cards.length
   }
+  function usageText(m) {
+    var usage = m.periods[root.period]
+    return m.router + " · " + (usage ? root.compact(usage.tokens) + " tokens · " + root.compact(usage.requests) + " pedidos · US$ " + usage.cost.toFixed(2) : "uso indisponível")
+  }
+  function cycle(list, current, step) {
+    var index = list.findIndex(x => x.id === current)
+    return list[(index + step + list.length) % list.length].id
+  }
+  function cycleRouter(step) { router = cycle(routerTabs, router, step) }
+  function cycleSort() { sort = cycle(sorts, sort, 1) }
+  function cyclePeriod() { period = cycle(periods, period, 1) }
+  function selectRouter(index) { if (index < routerTabs.length) router = routerTabs[index].id }
   function scrollBy(amount) { list.contentY = Math.max(0, Math.min(Math.max(0, list.contentHeight - list.height), list.contentY + amount)) }
-  onPeriodChanged: list.contentY = 0
+  onRouterChanged: { list.contentY = 0; savePrefs() }
+  onSortChanged: { list.contentY = 0; savePrefs() }
+  onPeriodChanged: savePrefs()
+  onRouterTabsChanged: if (!routerTabs.some(t => t.id === router)) router = "all"
   Timer { interval: 60000; running: true; repeat: true; onTriggered: root.now = Date.now() }
+
+  // Remember the chosen router, order and period between openings.
+  property bool prefsLoaded: false
+  function savePrefs() { if (prefsLoaded) prefs.setText(JSON.stringify({router: router, sort: sort, period: period})) }
+  FileView {
+    id: prefs
+    path: Quickshell.env("HOME") + "/.local/state/omarchy-trackers/routers/view.json"
+    printErrors: false
+    onLoaded: {
+      try {
+        var saved = JSON.parse(text())
+        if (root.sorts.some(s => s.id === saved.sort)) root.sort = saved.sort
+        if (root.periods.some(p => p.id === saved.period)) root.period = saved.period
+        if (typeof saved.router === "string") root.router = saved.router
+      } catch (e) {}
+      root.prefsLoaded = true
+    }
+    onLoadFailed: root.prefsLoaded = true
+  }
+
+  component Chip: Rectangle {
+    id: chip
+    property string label: ""
+    property bool selected: false
+    property bool alert: false
+    signal clicked()
+    width: chipText.implicitWidth + Style.space(22); height: Style.space(26); radius: Style.space(6)
+    color: selected ? root.faint(.14) : chipMouse.containsMouse ? root.faint(.07) : "transparent"
+    border.width: 1; border.color: root.faint(selected ? .22 : .1)
+    Row {
+      anchors.centerIn: parent; spacing: Style.space(6)
+      Rectangle { visible: chip.alert; anchors.verticalCenter: parent.verticalCenter; width: Style.space(6); height: width; radius: width / 2; color: "#ef4444" }
+      Text { id: chipText; text: chip.label; color: root.foreground; opacity: chip.selected ? 1 : .65; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: chip.selected }
+    }
+    MouseArea { id: chipMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: chip.clicked() }
+  }
+
   Column {
     id: header
-    width: parent.width; spacing: Style.space(9)
-    Row {
-      width: parent.width
-      Text { width: parent.width - Style.space(105); text: "9Router · radar de contas"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.heading; font.bold: true }
-      Rectangle {
-        width: Style.space(100); height: Style.space(25); radius: Style.space(5)
-        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, refreshMouse.containsMouse ? .13 : .06)
-        Text { anchors.centerIn: parent; text: root.snapshot.refreshing ? "Atualizando…" : "↻ Atualizar"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-        MouseArea { id: refreshMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.refreshRequested() }
+    width: parent.width; spacing: Style.space(10)
+    Item {
+      width: parent.width; height: Style.space(28)
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "9Router · cotas"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.heading; font.bold: true
+      }
+      Row {
+        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: Style.space(10)
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.view.cards.length + " contas · " + (root.snapshot.updatedAt ? "atualizado " + Qt.formatDateTime(new Date(root.snapshot.updatedAt * 1000), "HH:mm") : "aguardando leitura")
+          color: root.foreground; opacity: .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption
+        }
+        Chip { label: root.snapshot.refreshing ? "Atualizando…" : "↻ Atualizar"; onClicked: root.refreshRequested() }
       }
     }
-    Row {
-      width: parent.width; spacing: Style.space(12)
+    Flow {
+      width: parent.width; spacing: Style.space(6)
       Repeater {
-        model: root.snapshot.routers || []
-        delegate: Text {
+        model: root.routerTabs
+        delegate: Chip {
           required property var modelData
-          text: "● " + modelData.name + (modelData.error ? " · offline" : "")
-          color: modelData.error ? Color.urgent : root.foreground; opacity: .65
-          font.family: root.fontFamily; font.pixelSize: Style.font.caption
+          required property int index
+          label: modelData.name + "  " + root.routerCount(modelData.id)
+          selected: root.router === modelData.id
+          alert: !!modelData.error && modelData.error !== "Aguardando leitura"
+          onClicked: root.router = modelData.id
+        }
+      }
+    }
+    Item {
+      width: parent.width; height: Style.space(26)
+      Row {
+        spacing: Style.space(4)
+        Repeater {
+          model: root.sorts
+          delegate: Chip { required property var modelData; label: modelData.label; selected: root.sort === modelData.id; onClicked: root.sort = modelData.id }
+        }
+      }
+      Row {
+        anchors.right: parent.right; spacing: Style.space(4)
+        Text { anchors.verticalCenter: parent.verticalCenter; text: "Uso "; color: root.foreground; opacity: .45; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+        Repeater {
+          model: root.periods
+          delegate: Chip { required property var modelData; label: modelData.label; selected: root.period === modelData.id; onClicked: root.period = modelData.id }
+        }
+      }
+    }
+  }
+
+  Flickable {
+    id: list
+    anchors.top: header.bottom; anchors.topMargin: Style.space(12)
+    anchors.bottom: footer.top; anchors.bottomMargin: Style.space(8)
+    anchors.left: parent.left; anchors.right: parent.right
+    clip: true; contentHeight: grid.implicitHeight; contentWidth: width
+    boundsBehavior: Flickable.StopAtBounds
+    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    Grid {
+      id: grid
+      columns: root.columns; spacing: root.gap
+      Repeater {
+        model: root.view.cards
+        delegate: Rectangle {
+          id: card
+          required property var modelData
+          required property int index
+          width: root.cardWidth; height: body.implicitHeight + Style.space(24)
+          radius: Style.space(8)
+          color: root.faint(.035); border.width: 1; border.color: root.faint(.09)
+          opacity: modelData.active ? 1 : .5
+          Column {
+            id: body
+            x: Style.space(12); y: Style.space(12); width: parent.width - Style.space(24); spacing: Style.space(8)
+            Item {
+              width: parent.width; height: Style.space(34)
+              Rectangle {
+                id: iconBox
+                width: Style.space(34); height: width; radius: Style.space(7); color: root.faint(.06); clip: true
+                Image {
+                  id: icon
+                  anchors.fill: parent; anchors.margins: Style.space(3)
+                  source: Qt.resolvedUrl("icons/" + card.modelData.icon + ".png")
+                  sourceSize.width: 96; sourceSize.height: 96
+                  fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true
+                }
+                Text { visible: icon.status !== Image.Ready; anchors.centerIn: parent; text: card.modelData.title.charAt(0); color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.title; font.bold: true }
+              }
+              Column {
+                anchors.left: iconBox.right; anchors.leftMargin: Style.space(10); anchors.right: routes.left; anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter; spacing: Style.space(2)
+                Text { width: parent.width; text: card.modelData.title; elide: Text.ElideRight; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.body; font.bold: true }
+                Text { width: parent.width; text: card.modelData.name; textFormat: Text.PlainText; elide: Text.ElideRight; color: root.foreground; opacity: .6; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+              }
+              Row {
+                id: routes
+                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: Style.space(4)
+                Repeater {
+                  model: root.router === "all" ? card.modelData.members : []
+                  delegate: Rectangle {
+                    required property var modelData
+                    readonly property bool preferred: card.modelData.route === modelData.router
+                    width: routeText.implicitWidth + Style.space(12); height: Style.space(18); radius: height / 2
+                    color: preferred ? Qt.rgba(0.13, 0.77, 0.37, .15) : root.faint(.06)
+                    border.width: 1; border.color: preferred ? Qt.rgba(0.13, 0.77, 0.37, .45) : root.faint(.1)
+                    Text { id: routeText; anchors.centerIn: parent; text: modelData.router; color: parent.preferred ? "#22c55e" : root.foreground; opacity: modelData.active ? 1 : .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+                  }
+                }
+              }
+            }
+            Text {
+              width: parent.width; elide: Text.ElideRight; textFormat: Text.PlainText
+              text: card.modelData.quotas.length + (card.modelData.quotas.length === 1 ? " quota" : " quotas")
+                + (card.modelData.note ? " · " + card.modelData.note : "")
+                + (card.modelData.stale ? " · leitura de " + root.duration(card.modelData.updatedAgoMs) + " atrás" : "")
+              color: card.modelData.band === 3 ? "#ef4444" : root.foreground; opacity: card.modelData.band === 3 ? .9 : .45
+              font.family: root.fontFamily; font.pixelSize: Style.font.caption
+            }
+            Column {
+              width: parent.width; height: root.rowMax(card.index, "quotas") * Style.space(30)
+            Repeater {
+              model: card.modelData.quotas
+              delegate: Item {
+                id: quota
+                required property var modelData
+                width: body.width; height: Style.space(30)
+                Rectangle { id: dot; anchors.verticalCenter: parent.verticalCenter; width: Style.space(8); height: width; radius: width / 2; color: root.toneColor(quota.modelData.tone) }
+                Text {
+                  id: quotaLabel
+                  anchors.left: dot.right; anchors.leftMargin: Style.space(7); anchors.verticalCenter: parent.verticalCenter
+                  width: body.width * .3; elide: Text.ElideRight; textFormat: Text.PlainText
+                  text: quota.modelData.label; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true
+                }
+                Text {
+                  id: resetLabel
+                  anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(92); horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
+                  text: quota.modelData.expired ? "renovou" : quota.modelData.resetMs > 0 ? "em " + root.duration(quota.modelData.resetMs) : "N/A"
+                  color: root.foreground; opacity: quota.modelData.resetMs > 0 ? .85 : .45; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: quota.modelData.resetMs > 0
+                }
+                Item {
+                  anchors.left: quotaLabel.right; anchors.leftMargin: Style.space(8)
+                  anchors.right: resetLabel.left; anchors.rightMargin: Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter; height: Style.space(24)
+                  Rectangle {
+                    id: track
+                    width: parent.width; height: Style.space(4); radius: height / 2
+                    color: quota.modelData.tone === "none" ? root.faint(.08) : Qt.rgba(root.toneColor(quota.modelData.tone).r, root.toneColor(quota.modelData.tone).g, root.toneColor(quota.modelData.tone).b, .15)
+                    Rectangle {
+                      width: parent.width * (quota.modelData.unlimited ? 100 : quota.modelData.remaining || 0) / 100
+                      height: parent.height; radius: height / 2; color: root.toneColor(quota.modelData.tone)
+                    }
+                  }
+                  Text {
+                    anchors.left: parent.left; anchors.bottom: parent.bottom
+                    text: quota.modelData.usage; color: root.foreground; opacity: .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption
+                  }
+                  Text {
+                    anchors.right: parent.right; anchors.bottom: parent.bottom
+                    text: quota.modelData.unlimited ? "ilimitado" : quota.modelData.remaining === null ? "—" : quota.modelData.remaining + "%"
+                    color: root.toneColor(quota.modelData.tone); font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true
+                  }
+                }
+              }
+            }
+            }
+            Rectangle { width: parent.width; height: 1; color: root.faint(.08) }
+            Column {
+              width: parent.width; spacing: Style.space(3)
+            Repeater {
+              model: card.modelData.members
+              delegate: Text {
+                required property var modelData
+                width: body.width; elide: Text.ElideRight; textFormat: Text.PlainText
+                text: root.usageText(modelData)
+                color: root.foreground; opacity: .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption
+              }
+            }
+            Item { width: 1; height: Math.max(0, root.rowMax(card.index, "members") - card.modelData.members.length) * (Style.font.caption + Style.space(6)) }
+            }
+          }
         }
       }
     }
     Text {
-      width: parent.width
-      text: root.radar.rows.length + " contas · " + root.radar.connections + " conexões · " + (root.snapshot.updatedAt ? "atualizado " + Qt.formatDateTime(new Date(root.snapshot.updatedAt * 1000), "HH:mm") : "aguardando leitura")
-      color: root.foreground; opacity: .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption
-    }
-    Row {
-      width: parent.width; spacing: Style.space(6)
-      Repeater {
-        model: [{id:"today",label:"Hoje"},{id:"7d",label:"7 dias"},{id:"30d",label:"30 dias"},{id:"all",label:"Total"}]
-        delegate: Rectangle {
-          required property var modelData
-          width: (header.width - Style.space(18)) / 4; height: Style.space(26); radius: Style.space(5)
-          color: root.period === modelData.id ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, .12) : "transparent"
-          Text { anchors.centerIn: parent; text: modelData.label; color: root.foreground; opacity: root.period === modelData.id ? 1 : .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-          MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.period = modelData.id }
-        }
-      }
+      visible: !root.view.cards.length
+      text: root.snapshot.refreshing ? "Buscando contas…" : "Nenhuma conta neste router."
+      color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.body
     }
   }
-  Flickable {
-    id: list
-    anchors.top: header.bottom; anchors.topMargin: Style.space(12)
-    anchors.bottom: footer.top; anchors.bottomMargin: Style.space(9)
-    anchors.left: parent.left; anchors.right: parent.right
-    clip: true; contentHeight: rows.implicitHeight; contentWidth: width
-    boundsBehavior: Flickable.StopAtBounds
-    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-    Column {
-      id: rows
-      width: list.width - Style.space(9); spacing: Style.space(9)
-      Repeater {
-        model: root.radar.rows
-        delegate: Column {
-          id: accountRow
-          required property var modelData
-          width: rows.width; spacing: Style.space(4)
-          Text {
-            visible: accountRow.modelData.sectionStart
-            width: parent.width; height: implicitHeight + Style.space(5)
-            text: accountRow.modelData.section
-            color: root.foreground; opacity: .45; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true
-          }
-          Row {
-            width: parent.width
-            Text {
-              width: parent.width * .43
-              text: (accountRow.modelData.band <= 1 ? accountRow.modelData.rank + ". " : "") + root.providerName(accountRow.modelData.provider)
-              color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight
-            }
-            Text {
-              width: parent.width * .57; horizontalAlignment: Text.AlignRight
-              text: accountRow.modelData.band <= 1 ? accountRow.modelData.remaining + "% livre" + (accountRow.modelData.resetMs > 0 ? " · renova em " + root.duration(accountRow.modelData.resetMs) : "") : accountRow.modelData.note
-              color: accountRow.modelData.band === 3 ? Color.urgent : accountRow.modelData.band <= 1 ? Color.accent : root.foreground
-              opacity: accountRow.modelData.band <= 1 ? 1 : .6
-              font.family: root.fontFamily; font.pixelSize: Style.font.caption; elide: Text.ElideRight; textFormat: Text.PlainText
-            }
-          }
-          Text {
-            width: parent.width; text: accountRow.modelData.name; textFormat: Text.PlainText; elide: Text.ElideRight
-            color: root.foreground; opacity: .75; font.family: root.fontFamily; font.pixelSize: Style.font.caption
-          }
-          Rectangle {
-            visible: accountRow.modelData.primary !== null
-            width: parent.width; height: visible ? Style.space(3) : 0; radius: height / 2
-            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, .1)
-            Rectangle {
-              width: parent.width * Math.max(0, Math.min(100, accountRow.modelData.primary ? accountRow.modelData.primary.percent : 0)) / 100
-              height: parent.height; radius: height / 2
-              color: accountRow.modelData.band >= 3 ? Color.urgent : Color.accent
-            }
-          }
-          Text {
-            visible: accountRow.modelData.quotas.length > 0
-            width: parent.width; wrapMode: Text.WordWrap
-            text: accountRow.modelData.quotas.map(q => root.quotaLabel(q)).join(" · ") + (accountRow.modelData.band === 2 ? " · leitura anterior" : "")
-            color: root.foreground; opacity: .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption
-          }
-          Repeater {
-            model: accountRow.modelData.members
-            delegate: Text {
-              required property var modelData
-              width: accountRow.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText
-              text: root.memberLabel(modelData, accountRow.modelData.band <= 1 && accountRow.modelData.route === modelData.router.name)
-              color: root.foreground; opacity: .6; font.family: root.fontFamily; font.pixelSize: Style.font.caption
-            }
-          }
-          Rectangle { width: parent.width; height: 1; color: root.foreground; opacity: .08 }
-        }
-      }
-      Text { visible: !root.radar.rows.length; text: root.snapshot.refreshing ? "Buscando contas…" : "Aguardando leitura das contas."; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.body }
-    }
-  }
+
   Text {
     id: footer
-    anchors.bottom: parent.bottom; width: parent.width; wrapMode: Text.WordWrap
-    text: "Prioridade pela cota livre · sessão esgotada bloqueia.\nUso por router · leitura de limites a cada 5 min."
-    color: root.foreground; opacity: .45; font.family: root.fontFamily; font.pixelSize: Style.font.caption
+    anchors.bottom: parent.bottom; width: parent.width; elide: Text.ElideRight
+    text: "← → router · 0–9 escolhe · S ordem · P período · R atualiza · leitura a cada 5 min" + (root.view.hidden ? " · " + root.view.hidden + " removidas ocultas" : "")
+    color: root.foreground; opacity: .4; font.family: root.fontFamily; font.pixelSize: Style.font.caption
   }
 }

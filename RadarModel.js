@@ -58,4 +58,63 @@ function buildRows(snapshot, now) {
   return {rows: rows, connections: count};
 }
 
-if (typeof module !== "undefined") module.exports = {buildRows: buildRows, primaryQuota: primaryQuota};
+var PROVIDERS = {claude: "Claude Code", codex: "OpenAI Codex", "grok-cli": "Grok CLI", cursor: "Cursor", "devin-cli": "Devin CLI", devin: "Devin", github: "GitHub Copilot", "gemini-cli": "Gemini CLI", gemini: "Gemini", antigravity: "Antigravity", kiro: "Kiro", qwen: "Qwen", openrouter: "OpenRouter"};
+var PROVIDER_ORDER = ["claude", "codex", "grok-cli", "cursor", "devin-cli", "github", "gemini-cli", "antigravity", "kiro", "qwen", "gemini", "openrouter"];
+var STALE_MS = 20 * 60000;
+
+function providerTitle(provider) { return /compatible/.test(provider) ? "API compatível" : PROVIDERS[provider] || provider }
+function providerIcon(provider) { return /compatible/.test(provider) ? "openai" : provider }
+function providerRank(provider) { var i = PROVIDER_ORDER.indexOf(provider); return i < 0 ? PROVIDER_ORDER.length : i }
+function isRemoved(account) { return !account.active && String(account.status).indexOf("removida") >= 0 }
+
+function countText(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1) }
+
+// Same thresholds as the 9Router Quota Tracker: >70% green, >=30% yellow, below red.
+function quotaView(q, now) {
+  var known = typeof q.percent === "number" && isFinite(q.percent);
+  var remaining = q.unlimited || !known ? null : Math.max(0, Math.min(100, Math.round(100 - q.percent)));
+  var reset = resetTime(q.resetAt);
+  var expired = reset > 0 && reset <= now;
+  var tone = q.unlimited ? "green" : remaining === null || expired ? "none" : remaining > 70 ? "green" : remaining >= 30 ? "yellow" : "red";
+  var usage = q.unlimited ? "sem teto" : typeof q.used === "number" && q.total > 0 ? countText(q.used) + " / " + countText(q.total) : known ? Math.round(q.percent) + " / 100" : "sem leitura";
+  return {label: q.label, remaining: remaining, tone: tone, usage: usage, resetMs: reset > 0 ? reset - now : 0, expired: expired, unlimited: q.unlimited === true};
+}
+
+function earliestReset(card) {
+  var times = card.quotas.filter(q => q.resetMs > 0).map(q => q.resetMs);
+  return times.length ? Math.min.apply(null, times) : Infinity;
+}
+
+// One card per account for the selected router ("all" merges the same login across routers).
+function buildCards(snapshot, now, options) {
+  options = options || {};
+  var hidden = 0;
+  var routers = (snapshot.routers || []).filter(r => !options.router || options.router === "all" || r.id === options.router).map(function(router) {
+    var accounts = (router.accounts || []).filter(function(a) { if (isRemoved(a)) { hidden++; return false } return true });
+    return Object.assign({}, router, {accounts: accounts});
+  });
+  var built = buildRows({routers: routers}, now);
+  var cards = built.rows.map(function(row) {
+    var source = row.members.filter(m => (m.account.quotas || []).length)[0] || row.members[0];
+    var updated = source.account.quotaUpdatedAt ? source.account.quotaUpdatedAt * 1000 : 0;
+    return {
+      key: row.key, provider: row.provider, title: providerTitle(row.provider), icon: providerIcon(row.provider),
+      name: row.name, active: row.members.some(m => m.account.active), band: row.band, remaining: row.remaining,
+      note: row.note, route: row.band <= 1 ? row.route : "",
+      stale: (source.account.quotas || []).length > 0 && (!updated || now - updated > STALE_MS), updatedAgoMs: updated ? now - updated : 0,
+      quotas: (source.account.quotas || []).map(q => quotaView(q, now)),
+      members: row.members.map(m => ({router: m.router.name, routerId: m.router.id, active: m.account.active && !m.router.error, periods: m.account.periods || {}, note: m.note}))
+    };
+  });
+  var sort = options.sort || "provider";
+  cards.forEach((card, index) => card.order = index);
+  cards.sort(function(a, b) {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+    if (sort === "free") return a.order - b.order;
+    if (sort === "expiring") return earliestReset(a) - earliestReset(b) || a.order - b.order;
+    return providerRank(a.provider) - providerRank(b.provider) || a.provider.localeCompare(b.provider) || a.order - b.order;
+  });
+  return {cards: cards, hidden: hidden, connections: built.connections};
+}
+
+if (typeof module !== "undefined") module.exports = {buildRows: buildRows, buildCards: buildCards, quotaView: quotaView, primaryQuota: primaryQuota};
