@@ -6,6 +6,8 @@ O ícone **9R** abre a aba **Somadas**, com um saldo agregado de Claude e outro 
 
 A soma inclui as assinaturas pausadas, exclui contas removidas e conta uma identidade por provedor apenas uma vez entre routers. Usa a semana geral quando disponível, senão a janela principal do provedor. É saldo de assinatura, não disponibilidade da rota. Leituras antigas, vencidas ou com erro ficam fora do saldo conhecido; `≥` indica soma parcial. Plano desconhecido aparece explicitamente, sem presumir que vale 20x.
 
+Cada bloco também mostra a proporção do potencial que resta, quantas contas estão **prontas agora** e a contagem regressiva até a **próxima renovação**. Prontas significa ativas, com leitura recente, saldo e sem erro conhecido na rota; sessão esgotada impede essa contagem. A renovação é a primeira janela principal entre as contas da soma, incluindo pausadas, sem presumir que todas renovam juntas. Leituras vencidas ou com erro não fornecem horários. Passe o mouse nesses números para consultar a regra e os demais estados.
+
 A aba **Contas** preserva os cards por conta, os filtros de router, a ordem e os períodos de uso. A aba Somadas sempre reúne todos os routers, independentemente do último filtro usado em Contas.
 
 ![Painel com cards de cota](docs/releases/v1.2.0/release.png)

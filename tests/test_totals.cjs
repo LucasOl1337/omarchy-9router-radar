@@ -42,3 +42,30 @@ test('offline router cannot supply a current balance, and empty providers are ex
   assert.equal(gpt.accounts,0);assert.equal(gpt.maximum,0);
 });
 test('clock always renders Brasília',()=>assert.equal(brasiliaTime(now/1000),'09:00'));
+
+test('readiness counts unique usable accounts and separates exhausted, paused, stale and unavailable routes', () => {
+  const good = a('good');
+  const total = totals(r('A', [good,
+    a('exhausted', {quotas: [q('weekly', 10), q('session (5h)', 100)]}),
+    a('paused', {active: false}), a('stale', {quotaUpdatedAt: now/1000 - 1201}),
+    a('unavailable', {status: 'unavailable'})]), r('B', [good]))[0];
+  assert.equal(total.accounts, 5); assert.equal(total.ready, 1);
+  assert.equal(total.exhausted, 1); assert.equal(total.paused, 1);
+  assert.equal(total.unread, 1); assert.equal(total.unavailable, 1);
+});
+test('next renewal uses the latest primary window per identity, including paused accounts', () => {
+  const total = totals(r('A', [
+    a('same', {quotaUpdatedAt: now/1000 - 10, quotas: [q('weekly', 60, now + 60000)]}),
+    a('paused', {active: false, quotas: [q('weekly', 90, now + 7200000)]})
+  ]), r('B', [a('same', {quotas: [q('session (5h)', 0, now + 30000), q('weekly model (7d)', 50, now + 60000), q('weekly', 60, now + 10800000)]})]))[0];
+  assert.equal(total.nextResetAt, now + 7200000);
+  assert.equal(total.nextResetMs, 7200000);
+});
+test('missing, stale and expired renewals are never presented as a scheduled recovery', () => {
+  const total = totals(r('A', [
+    a('missing', {quotas: [{label:'weekly', percent:50}]}),
+    a('expired', {quotas:[q('weekly', 10, now - 1000)]}),
+    a('stale', {quotaUpdatedAt:now/1000-1201,quotas:[q('weekly', 0, now+60000)]})]))[0];
+  assert.equal(total.nextResetAt, 0); assert.equal(total.nextResetMs, 0);
+  assert.equal(total.partial, true);
+});

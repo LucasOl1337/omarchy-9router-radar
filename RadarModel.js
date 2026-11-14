@@ -124,10 +124,15 @@ function buildTotals(snapshot, now) {
   var rows = buildRows({routers: routers}, now).rows;
   return ["claude", "codex"].map(function(provider) {
     var total = {provider: provider, title: provider === "claude" ? "Claude" : "GPT", icon: provider,
-      remaining: 0, maximum: 0, accounts: 0, known: 0, unknownPlans: 0, missing: 0, paused: 0, twenty: 0, five: 0};
+      remaining: 0, maximum: 0, accounts: 0, known: 0, unknownPlans: 0, missing: 0, paused: 0, twenty: 0, five: 0,
+      ready: 0, exhausted: 0, unavailable: 0, unread: 0, nextResetAt: 0, nextResetMs: 0};
     rows.filter(r => r.provider === provider).forEach(function(row) {
       total.accounts++;
       if (!row.members.some(m => m.account.active)) total.paused++;
+      else if (row.band <= 1) total.ready++;
+      else if (row.band === 3) total.exhausted++;
+      else if (row.band === 2) total.unread++;
+      else total.unavailable++;
       var plans = row.members.map(m => m.account.plan).filter(p => p === "20x" || p === "5x");
       var plan = plans[0];
       if (provider === "claude" && (!plan || plans.some(p => p !== plan))) { total.unknownPlans++; return }
@@ -142,11 +147,15 @@ function buildTotals(snapshot, now) {
       }).sort((a, b) => b.account.quotaUpdatedAt - a.account.quotaUpdatedAt);
       if (!readings.length) { total.missing++; return }
       total.known++;
-      total.remaining += Math.max(0, Math.min(100, 100 - primaryQuota(readings[0].account.quotas).percent)) * weight;
+      var primary = primaryQuota(readings[0].account.quotas);
+      total.remaining += Math.max(0, Math.min(100, 100 - primary.percent)) * weight;
+      var reset = resetTime(primary.resetAt);
+      if (reset > now && (!total.nextResetAt || reset < total.nextResetAt)) total.nextResetAt = reset;
     });
     total.remaining = Math.round(total.remaining * 10) / 10;
     total.partial = total.missing > 0 || total.unknownPlans > 0;
     total.ratio = total.maximum ? total.remaining / total.maximum : 0;
+    total.nextResetMs = total.nextResetAt ? total.nextResetAt - now : 0;
     total.tone = !total.known ? "none" : total.ratio > .7 ? "green" : total.ratio >= .3 ? "yellow" : "red";
     return total;
   });

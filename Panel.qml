@@ -17,7 +17,7 @@ Panel {
     function toggle(): void { root.toggle() }
     function router(id: string): void { content.aggregate = false; content.router = id }
     function diagnostics(): string {
-      return JSON.stringify({version: "1.3.0", sourceUrl: Qt.resolvedUrl("Panel.qml").toString(), icon: button.text, layout: content.aggregate ? "provider-totals" : "quota-cards", totals: content.totals, router: content.router, sort: content.sort, columns: content.columns, cards: content.view.cards.length, connections: content.view.connections, gateways: root.snapshot.routers.length})
+      return JSON.stringify({version: "1.4.0", sourceUrl: Qt.resolvedUrl("Panel.qml").toString(), icon: button.text, layout: content.aggregate ? "provider-totals" : "quota-cards", totals: content.totals, router: content.router, sort: content.sort, columns: content.columns, cards: content.view.cards.length, connections: content.view.connections, gateways: root.snapshot.routers.length})
     }
   }
   property var snapshot: ({routers: []})
