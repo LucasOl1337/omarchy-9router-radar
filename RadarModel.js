@@ -117,4 +117,49 @@ function buildCards(snapshot, now, options) {
   return {cards: cards, hidden: hidden, connections: built.connections};
 }
 
-if (typeof module !== "undefined") module.exports = {buildRows: buildRows, buildCards: buildCards, quotaView: quotaView, primaryQuota: primaryQuota};
+// Subscription balance, independent of routing status: paused accounts still own quota.
+// A login shared by gateways contributes once, using its latest successful reading.
+function buildTotals(snapshot, now) {
+  var routers = (snapshot.routers || []).map(r => Object.assign({}, r, {accounts: (r.accounts || []).filter(a => !isRemoved(a))}));
+  var rows = buildRows({routers: routers}, now).rows;
+  return ["claude", "codex"].map(function(provider) {
+    var total = {provider: provider, title: provider === "claude" ? "Claude" : "GPT", icon: provider,
+      remaining: 0, maximum: 0, accounts: 0, known: 0, unknownPlans: 0, missing: 0, paused: 0, twenty: 0, five: 0};
+    rows.filter(r => r.provider === provider).forEach(function(row) {
+      total.accounts++;
+      if (!row.members.some(m => m.account.active)) total.paused++;
+      var plans = row.members.map(m => m.account.plan).filter(p => p === "20x" || p === "5x");
+      var plan = plans[0];
+      if (provider === "claude" && (!plan || plans.some(p => p !== plan))) { total.unknownPlans++; return }
+      var weight = provider === "claude" && plan === "5x" ? .5 : 1;
+      if (provider === "claude") total[plan === "5x" ? "five" : "twenty"]++;
+      total.maximum += 100 * weight;
+      var readings = row.members.filter(function(m) {
+        var q = primaryQuota(m.account.quotas);
+        var reset = q ? resetTime(q.resetAt) : 0;
+        return !m.router.error && !m.account.quotaError && q && m.account.quotaUpdatedAt
+          && now - m.account.quotaUpdatedAt * 1000 <= STALE_MS && (!reset || reset > now);
+      }).sort((a, b) => b.account.quotaUpdatedAt - a.account.quotaUpdatedAt);
+      if (!readings.length) { total.missing++; return }
+      total.known++;
+      total.remaining += Math.max(0, Math.min(100, 100 - primaryQuota(readings[0].account.quotas).percent)) * weight;
+    });
+    total.remaining = Math.round(total.remaining * 10) / 10;
+    total.partial = total.missing > 0 || total.unknownPlans > 0;
+    total.ratio = total.maximum ? total.remaining / total.maximum : 0;
+    total.tone = !total.known ? "none" : total.ratio > .7 ? "green" : total.ratio >= .3 ? "yellow" : "red";
+    return total;
+  });
+}
+
+function brasiliaTime(seconds) {
+  var d = new Date(seconds * 1000);
+  // Intl supplies the IANA timezone where supported; UTC−3 covers current Brasília in QML.
+  if (typeof Intl !== "undefined" && Intl.DateTimeFormat) {
+    return new Intl.DateTimeFormat("pt-BR", {timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false}).format(d);
+  }
+  d = new Date(d.getTime() - 3 * 3600000);
+  return ("0" + d.getUTCHours()).slice(-2) + ":" + ("0" + d.getUTCMinutes()).slice(-2);
+}
+
+if (typeof module !== "undefined") module.exports = {buildRows: buildRows, buildCards: buildCards, buildTotals: buildTotals, brasiliaTime: brasiliaTime, quotaView: quotaView, primaryQuota: primaryQuota};

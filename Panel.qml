@@ -15,9 +15,9 @@ Panel {
     function open(): void { root.open() }
     function close(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function router(id: string): void { content.router = id }
+    function router(id: string): void { content.aggregate = false; content.router = id }
     function diagnostics(): string {
-      return JSON.stringify({version: "1.2.0", sourceUrl: Qt.resolvedUrl("Panel.qml").toString(), icon: button.text, layout: "quota-cards", router: content.router, sort: content.sort, columns: content.columns, cards: content.view.cards.length, connections: content.view.connections, gateways: root.snapshot.routers.length})
+      return JSON.stringify({version: "1.3.0", sourceUrl: Qt.resolvedUrl("Panel.qml").toString(), icon: button.text, layout: content.aggregate ? "provider-totals" : "quota-cards", totals: content.totals, router: content.router, sort: content.sort, columns: content.columns, cards: content.view.cards.length, connections: content.view.connections, gateways: root.snapshot.routers.length})
     }
   }
   property var snapshot: ({routers: []})
@@ -60,8 +60,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keys
-    contentWidth: popup.fittedContentWidth(Style.space(1560))
-    contentHeight: popup.fittedContentHeight(Style.space(980))
+    contentWidth: popup.fittedContentWidth(Style.space(content.aggregate ? 720 : 1560))
+    contentHeight: popup.fittedContentHeight(Style.space(content.aggregate ? 760 : 980))
     PanelKeyCatcher {
       id: keys
       anchors.fill: parent

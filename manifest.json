@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "lol.routers",
   "name": "9Router · radar de contas",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "LucasOl",
-  "description": "Cotas das contas dos 9Routers em cards, no visual do Quota Tracker, com filtro por router.",
+  "description": "Saldo somado de Claude e GPT, com pesos por plano e detalhes por conta e router.",
   "kinds": [
     "bar-widget"
   ],

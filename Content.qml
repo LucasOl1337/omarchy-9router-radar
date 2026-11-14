@@ -10,6 +10,9 @@ Item {
   property var snapshot: ({routers: []})
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  property bool aggregate: true
+  property bool persistPreferences: true
+  readonly property var totals: RadarModel.buildTotals(snapshot, now)
   property string router: "all"
   property string sort: "provider"
   property string period: "today"
@@ -48,11 +51,11 @@ Item {
     var index = list.findIndex(x => x.id === current)
     return list[(index + step + list.length) % list.length].id
   }
-  function cycleRouter(step) { router = cycle(routerTabs, router, step) }
+  function cycleRouter(step) { aggregate = false; router = cycle(routerTabs, router, step) }
   function cycleSort() { sort = cycle(sorts, sort, 1) }
   function cyclePeriod() { period = cycle(periods, period, 1) }
-  function selectRouter(index) { if (index < routerTabs.length) router = routerTabs[index].id }
-  function scrollBy(amount) { list.contentY = Math.max(0, Math.min(Math.max(0, list.contentHeight - list.height), list.contentY + amount)) }
+  function selectRouter(index) { if (index < routerTabs.length) { aggregate = false; router = routerTabs[index].id } }
+  function scrollBy(amount) { if (aggregate) { summary.contentY = Math.max(0, Math.min(Math.max(0, summary.contentHeight - summary.height), summary.contentY + amount)); return }; list.contentY = Math.max(0, Math.min(Math.max(0, list.contentHeight - list.height), list.contentY + amount)) }
   onRouterChanged: { list.contentY = 0; savePrefs() }
   onSortChanged: { list.contentY = 0; savePrefs() }
   onPeriodChanged: savePrefs()
@@ -61,10 +64,10 @@ Item {
 
   // Remember the chosen router, order and period between openings.
   property bool prefsLoaded: false
-  function savePrefs() { if (prefsLoaded) prefs.setText(JSON.stringify({router: router, sort: sort, period: period})) }
+  function savePrefs() { if (persistPreferences && prefsLoaded) prefs.setText(JSON.stringify({router: router, sort: sort, period: period})) }
   FileView {
     id: prefs
-    path: Quickshell.env("HOME") + "/.local/state/omarchy-trackers/routers/view.json"
+    path: root.persistPreferences ? Quickshell.env("HOME") + "/.local/state/omarchy-trackers/routers/view.json" : ""
     printErrors: false
     onLoaded: {
       try {
@@ -108,13 +111,19 @@ Item {
         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: Style.space(10)
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: root.view.cards.length + " contas · " + (root.snapshot.updatedAt ? "atualizado " + Qt.formatDateTime(new Date(root.snapshot.updatedAt * 1000), "HH:mm") : "aguardando leitura")
+          text: (root.aggregate ? "" : root.view.cards.length + " contas · ") + (root.snapshot.updatedAt ? "atualizado " + RadarModel.brasiliaTime(root.snapshot.updatedAt) : "aguardando leitura")
           color: root.foreground; opacity: .5; font.family: root.fontFamily; font.pixelSize: Style.font.caption
         }
         Chip { label: root.snapshot.refreshing ? "Atualizando…" : "↻ Atualizar"; onClicked: root.refreshRequested() }
       }
     }
+    Row {
+      spacing: Style.space(6)
+      Chip { label: "Somadas"; selected: root.aggregate; onClicked: root.aggregate = true }
+      Chip { label: "Contas"; selected: !root.aggregate; onClicked: root.aggregate = false }
+    }
     Flow {
+      visible: !root.aggregate
       width: parent.width; spacing: Style.space(6)
       Repeater {
         model: root.routerTabs
@@ -129,6 +138,7 @@ Item {
       }
     }
     Item {
+      visible: !root.aggregate
       width: parent.width; height: Style.space(26)
       Row {
         spacing: Style.space(4)
@@ -149,7 +159,39 @@ Item {
   }
 
   Flickable {
+    id: summary
+    objectName: "providerTotals"
+    visible: root.aggregate
+    anchors.top: header.bottom; anchors.topMargin: Style.space(14)
+    anchors.bottom: footer.top; anchors.bottomMargin: Style.space(12)
+    anchors.left: parent.left; anchors.right: parent.right
+    clip: true; contentWidth: width; contentHeight: summaryBody.implicitHeight
+    boundsBehavior: Flickable.StopAtBounds
+    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    Column {
+      id: summaryBody
+      objectName: "providerTotalsBody"
+      width: Math.min(parent.width - Style.space(10), Style.space(860)); spacing: Style.space(12)
+      Repeater {
+        model: root.totals
+        delegate: ProviderTotal { required property var modelData; total: modelData; foreground: root.foreground; fontFamily: root.fontFamily }
+      }
+      Text {
+        width: parent.width; wrapMode: Text.WordWrap
+        text: "Claude: 20x = 100% · 5x = 50%. Mesma conta em vários routers conta uma vez."
+        color: root.foreground; opacity: .55; font.family: root.fontFamily; font.pixelSize: Style.font.caption
+      }
+      Text {
+        width: parent.width; wrapMode: Text.WordWrap
+        text: "Saldo da semana, ou da janela informada pelo provedor. Inclui contas pausadas; não indica disponibilidade da rota."
+        color: root.foreground; opacity: .45; font.family: root.fontFamily; font.pixelSize: Style.font.caption
+      }
+    }
+  }
+
+  Flickable {
     id: list
+    visible: !root.aggregate
     anchors.top: header.bottom; anchors.topMargin: Style.space(12)
     anchors.bottom: footer.top; anchors.bottomMargin: Style.space(8)
     anchors.left: parent.left; anchors.right: parent.right
@@ -292,7 +334,7 @@ Item {
   Text {
     id: footer
     anchors.bottom: parent.bottom; width: parent.width; elide: Text.ElideRight
-    text: "← → router · 0–9 escolhe · S ordem · P período · R atualiza · leitura a cada 5 min" + (root.view.hidden ? " · " + root.view.hidden + " removidas ocultas" : "")
+    text: root.aggregate ? "R atualiza · leitura a cada 5 min · horário de Brasília" : "← → router · 0–9 escolhe · S ordem · P período · R atualiza · leitura a cada 5 min" + (root.view.hidden ? " · " + root.view.hidden + " removidas ocultas" : "")
     color: root.foreground; opacity: .4; font.family: root.fontFamily; font.pixelSize: Style.font.caption
   }
 }

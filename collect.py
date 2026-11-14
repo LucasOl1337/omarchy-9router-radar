@@ -5,6 +5,7 @@ import http.cookiejar
 import json
 import math
 import os
+import re
 import shlex
 import subprocess
 import time
@@ -161,9 +162,28 @@ def counters(raw):
         cost=number(raw.get('cost', raw.get('totalCost'))))
 
 
+def connection_email(connection, config):
+    configured = config.get('account_emails', {}).get(connection.get('id'))
+    email = configured or connection.get('email')
+    if email:
+        return str(email).strip().lower()
+    match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", str(connection.get('name') or ''))
+    return match.group(0).lower() if match else ''
+
+
+def account_plan(connection, config):
+    """Only the explicit Claude plan reaches the snapshot, never provider secrets."""
+    if connection.get('provider') != 'claude':
+        return ''
+    plans = config.get('account_plans', {})
+    override = plans.get(connection.get('id')) or plans.get(connection_email(connection, config))
+    match = re.search(r'(?<![a-z0-9])(20|5)\s*x(?![a-z0-9])', str(override or connection.get('name') or ''), re.I)
+    return match.group(1) + 'x' if match else ''
+
+
 def normalize(name, config, connections, stats, quotas, previous):
-    accounts = {c['id']: dict(id=c['id'], email=str(c.get('email') or ''), name=str(c.get('email') or c.get('name') or c['id'][:8]),
-        provider=str(c.get('provider') or 'Outro'), active=c.get('isActive') is not False,
+    accounts = {c['id']: dict(id=c['id'], email=connection_email(c, config), name=str(c.get('email') or c.get('name') or c['id'][:8]),
+        provider=str(c.get('provider') or 'Outro'), plan=account_plan(c, config), active=c.get('isActive') is not False,
         status=str(c.get('testStatus') or ''), periods={}, quotas=[], quotaError='', quotaUpdatedAt=None)
         for c in connections if c.get('id')}
     totals = {}

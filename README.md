@@ -2,7 +2,11 @@
 
 As cotas das contas dos seus 9Routers na barra do Omarchy, no mesmo formato do Quota Tracker do painel do 9Router.
 
-O ícone **9R** abre uma grade de cards, um por conta, com o ícone do provedor e uma barra por cota: verde acima de 70% livre, amarela de 30% a 70%, vermelha abaixo. Cada barra mostra o usado (`52 / 100`), o que resta e quando renova. Os botões do topo mostram todos os routers juntos ou só um deles, e a ordem pode ser por provedor, mais livre ou expira primeiro.
+O ícone **9R** abre a aba **Somadas**, com um saldo agregado de Claude e outro de GPT, no formato `320% / 800%` (restante / potencial máximo). No Claude, cada conta 20x pesa 100% cheia e cada 5x pesa 50% cheia; no GPT, cada conta cheia pesa 100%. A barra representa saldo dividido pelo máximo, enquanto o número pode passar de 100%.
+
+A soma inclui as assinaturas pausadas, exclui contas removidas e conta uma identidade por provedor apenas uma vez entre routers. Usa a semana geral quando disponível, senão a janela principal do provedor. É saldo de assinatura, não disponibilidade da rota. Leituras antigas, vencidas ou com erro ficam fora do saldo conhecido; `≥` indica soma parcial. Plano desconhecido aparece explicitamente, sem presumir que vale 20x.
+
+A aba **Contas** preserva os cards por conta, os filtros de router, a ordem e os períodos de uso. A aba Somadas sempre reúne todos os routers, independentemente do último filtro usado em Contas.
 
 ![Painel com cards de cota](docs/releases/v1.2.0/release.png)
 
@@ -25,6 +29,17 @@ Com `transport: "ssh"`, informe `ssh_host`, `container` e `api_port`. O coletor 
 
 O cadastro legado em `~/.config/rotas/routers.json` continua funcionando quando o cadastro novo não existe. Nesse modo, Railway e Sherlocker usam os comandos do cofre local, e Hostinger usa o alias SSH `sennin-kvm`.
 
+O plano Claude é extraído do rótulo da conexão (`20x` ou `5x`, sem diferenciar maiúsculas). Para um nome sem plano, cada router aceita `account_plans`, mapa de ID de conexão ou email para `20x`/`5x`. O email vem do campo próprio ou de um email escrito no nome. Uma conexão genérica pode usar `account_emails`, mapa de ID para email **confirmado**, para deduplicar o mesmo login em gateways diferentes. Não inferir identidade a partir de percentuais iguais.
+
+Exemplo de campos opcionais dentro de um router:
+
+```json
+{
+  "account_plans": {"conta@example.com": "20x"},
+  "account_emails": {"id-da-conexao": "conta@example.com"}
+}
+```
+
 O radar junta o mesmo email e provedor entre routers. Contas com nomes genéricos ficam separadas porque o nome sozinho não confirma identidade. Desativadas e removidas continuam no fim pra consultar o histórico.
 
 A ordem considera a cota semanal geral, quando existe; caso contrário, usa a sessão ou a janela informada pelo provedor. Uma sessão esgotada bloqueia a recomendação mesmo com semana disponível. Limites específicos de um modelo não substituem a semana geral. Contas sem cota, com leitura de mais de 20 minutos, reset passado ou erro de atualização ficam sem recomendação. Isso indica disponibilidade de cota; a escolha do modelo depende da tarefa.
@@ -43,7 +58,7 @@ Cada linha mostra os tokens, pedidos e custo estimado registrados por cada route
 python3 install.py
 systemctl --user status omarchy-routers.timer
 systemctl --user start omarchy-routers.service
-node --test tests/test_radar.cjs
+node --test tests/*.cjs
 python3 -m unittest discover -s tests -v
 ```
 
