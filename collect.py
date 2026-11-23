@@ -75,23 +75,57 @@ def dashboard_password(name, config):
     return password.stdout.strip()
 
 
+def session_jar(name):
+    """Cookie do painel guardado entre rodadas (0600, só desta conta).
+
+    Pegar a senha no cofre sobe o CLI do Bitwarden (~4 s de CPU por router); com a
+    sessão guardada o login só acontece quando o painel responde 401/403."""
+    sessions = STATE / 'sessions'
+    sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
+    jar = http.cookiejar.LWPCookieJar(str(sessions / (name + '.cookies')))
+    try:
+        jar.load(ignore_discard=True)
+    except (OSError, http.cookiejar.LoadError):
+        jar.clear()
+    return jar
+
+
+def save_jar(jar):
+    jar.save(ignore_discard=True)
+    os.chmod(jar.filename, 0o600)
+
+
 def http_gateway(name, config, previous):
     base = config['base_url'].rstrip('/').removesuffix('/v1')
-    password = dashboard_password(name, config)
-    opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    req = Request(base + '/api/auth/login', data=json.dumps({'password': password}).encode(),
-        headers={'Content-Type': 'application/json', 'User-Agent': 'omarchy-trackers/1.0'})
-    try:
-        with opener.open(req, timeout=20) as response:
-            response.read()
-    except HTTPError as error:
-        raise RuntimeError('Login do painel: HTTP ' + str(error.code)) from None
+    jar = session_jar(name)
+    opener = build_opener(HTTPCookieProcessor(jar))
+
+    def login():
+        password = dashboard_password(name, config)
+        jar.clear()
+        req = Request(base + '/api/auth/login', data=json.dumps({'password': password}).encode(),
+            headers={'Content-Type': 'application/json', 'User-Agent': 'omarchy-trackers/1.0'})
+        try:
+            with opener.open(req, timeout=20) as response:
+                response.read()
+        except HTTPError as error:
+            raise RuntimeError('Login do painel: HTTP ' + str(error.code)) from None
+        save_jar(jar)
 
     def get(path):
         with opener.open(Request(base + path, headers={'Accept': 'application/json', 'User-Agent': 'omarchy-trackers/1.0'}), timeout=20) as response:
             return json.load(response)
 
-    connections = clean_connections(get('/api/providers'))
+    if not len(jar):
+        login()
+    try:
+        providers = get('/api/providers')
+    except HTTPError as error:
+        if error.code not in (401, 403):
+            raise
+        login()
+        providers = get('/api/providers')
+    connections = clean_connections(providers)
     stats = {}
     for period in PERIODS:
         try:

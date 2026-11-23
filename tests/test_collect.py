@@ -28,6 +28,47 @@ class CollectorTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Cofre ocupado'):
                 collector.dashboard_password('custom', {'password_command': ['cofre']})
 
+    def test_dashboard_session_is_reused_between_runs(self):
+        import http.server, tempfile, threading
+        logins = []
+
+        class Panel(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def reply(self, code, body, cookie=None):
+                self.send_response(code)
+                self.send_header('Content-Type', 'application/json')
+                if cookie:
+                    self.send_header('Set-Cookie', cookie)
+                self.end_headers()
+                self.wfile.write(body.encode())
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers['Content-Length']))
+                logins.append(1)
+                self.reply(200, '{}', 'auth_token=s%d; Path=/; HttpOnly' % len(logins))
+
+            def do_GET(self):
+                if 'auth_token=s' not in (self.headers.get('Cookie') or ''):
+                    return self.reply(401, '{}')
+                self.reply(200, '{"connections":[]}' if self.path == '/api/providers' else '{}')
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Panel)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        config = {'base_url': 'http://127.0.0.1:%d/v1' % server.server_port, 'password_env': 'PANEL_PW'}
+        with tempfile.TemporaryDirectory() as state, patch.object(collector, 'STATE', Path(state)), \
+                patch.dict(collector.os.environ, {'PANEL_PW': 'x'}):
+            collector.http_gateway('local', config, {})
+            collector.http_gateway('local', config, {})
+            self.assertEqual(len(logins), 1, 'segunda rodada reaproveita a sessão')
+            self.assertEqual(oct((Path(state) / 'sessions/local.cookies').stat().st_mode & 0o777), '0o600')
+            # Sessão vencida no painel: entra de novo uma vez e segue.
+            (Path(state) / 'sessions/local.cookies').write_text('#LWP-Cookies-2.0\nSet-Cookie3: auth_token=velho; path="/"; domain="127.0.0.1"; path_spec; discard; version=0\n')
+            collector.http_gateway('local', config, {})
+            self.assertEqual(len(logins), 2)
+        server.shutdown()
+
     def test_ssh_uses_configured_host_container_and_port(self):
         payload = SimpleNamespace(returncode=0, stdout='{"connections":[],"stats":{},"quotas":{}}')
         with patch.object(collector.subprocess, 'run', return_value=payload) as run:
