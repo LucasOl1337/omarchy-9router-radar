@@ -124,7 +124,7 @@ function buildTotals(snapshot, now) {
   var rows = buildRows({routers: routers}, now).rows;
   return ["claude", "codex"].map(function(provider) {
     var total = {provider: provider, title: provider === "claude" ? "Claude" : "GPT", icon: provider,
-      remaining: 0, maximum: 0, accounts: 0, known: 0, unknownPlans: 0, missing: 0, paused: 0, twenty: 0, five: 0,
+      remaining: 0, maximum: 0, knownMaximum: 0, accounts: 0, known: 0, unknownPlans: 0, missing: 0, paused: 0, twenty: 0, five: 0,
       ready: 0, exhausted: 0, unavailable: 0, unread: 0, nextResetAt: 0, nextResetMs: 0};
     rows.filter(r => r.provider === provider).forEach(function(row) {
       total.accounts++;
@@ -147,6 +147,7 @@ function buildTotals(snapshot, now) {
       }).sort((a, b) => b.account.quotaUpdatedAt - a.account.quotaUpdatedAt);
       if (!readings.length) { total.missing++; return }
       total.known++;
+      total.knownMaximum += 100 * weight;
       var primary = primaryQuota(readings[0].account.quotas);
       total.remaining += Math.max(0, Math.min(100, 100 - primary.percent)) * weight;
       var reset = resetTime(primary.resetAt);
@@ -156,7 +157,10 @@ function buildTotals(snapshot, now) {
     total.partial = total.missing > 0 || total.unknownPlans > 0;
     total.ratio = total.maximum ? total.remaining / total.maximum : 0;
     total.nextResetMs = total.nextResetAt ? total.nextResetAt - now : 0;
-    total.tone = !total.known ? "none" : total.ratio > .7 ? "green" : total.ratio >= .3 ? "yellow" : "red";
+    // The color judges what was read: an unread account is unknown, not empty, so a
+    // router offline for days must not turn a healthy balance red.
+    var health = total.knownMaximum ? total.remaining / total.knownMaximum : 0;
+    total.tone = !total.known ? "none" : health > .7 ? "green" : health >= .3 ? "yellow" : "red";
     return total;
   });
 }

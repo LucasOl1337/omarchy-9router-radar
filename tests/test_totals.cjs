@@ -69,3 +69,9 @@ test('missing, stale and expired renewals are never presented as a scheduled rec
   assert.equal(total.nextResetAt, 0); assert.equal(total.nextResetMs, 0);
   assert.equal(total.partial, true);
 });
+test('unread accounts do not paint a healthy known balance red', () => {
+  const full = id => a(id, {quotas: [q('weekly', 10)]});
+  const total = totals(r('A', [full('a'), full('b')]), r('B', ['c','d','e','f','g','h'].map(id => a(id)), {error: 'offline'}))[0];
+  assert.equal(total.partial, true); assert.equal(total.ratio, 180 / 800);
+  assert.equal(total.tone, 'green');
+});
